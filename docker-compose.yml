@@ -1,0 +1,58 @@
+version: '3'
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    networks:
+      - data_pipeline
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    networks:
+      - data_pipeline
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+  mongo:
+    image: mongo:4.0.0
+    command: mongod --port 27027
+    networks:
+      - data_pipeline
+    ports:
+      - "27027:27027"
+  simulator:
+    networks:
+      - data_pipeline
+    build: ./twitter_simulator
+    ports:
+      - "5555:5555"
+  producer_app:
+    build: .
+    networks:
+      - data_pipeline
+    command: ["/app/wait-for-kakfa.sh","kafka", "9092","/app/producer.py"]
+    depends_on:
+      - kafka
+      - simulator
+
+  consumer_app:
+    build: .
+    networks:
+      - data_pipeline
+    command: ["/app/wait-for-kakfa.sh","kafka", "9092","/app/consumer.py"]
+    depends_on:
+      - producer_app
+      - kafka
+      - mongo
+
+networks:
+  data_pipeline:
+    driver: bridge
